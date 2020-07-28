@@ -31,14 +31,16 @@ if (isset($argv[4])) {
 // call connection function
 $connection_class = new NokiaOltConnection($host, $port, $user, $password);
 $connection = $connection_class->get_connection();
+$relativePath = '/usr/lib/zabbix/externalscripts/';
+$xmlFile = $host . '_equipment_stats.xml';
 
 if ($connection != NULL) {
     $shell = $connection_class->get_shell($connection, 'xterm');
     if ($shell != NULL) {
-		$command = 'show equipment ont status pon detail xml' . PHP_EOL;
+        $command = 'show equipment ont status pon detail xml' . PHP_EOL;
         fwrite($shell, $command);
         sleep(1);
-        $fh = fopen('/usr/lib/zabbix/externalscripts/nokia_equipment_status.xml', 'wa+');
+        $fh = fopen($relativePath . $xmlFile, 'wa+');
         while ($line = fgets($shell)) {
             $line = trim($line);
             if (preg_match('/^</', $line)) {
@@ -49,11 +51,11 @@ if ($connection != NULL) {
         fclose($fh);
         fclose($shell);
 
-        chmod('/usr/lib/zabbix/externalscripts/nokia_equipment_status.xml', 0777);
+        chmod($relativePath . $xmlFile, 0777);
 
         sleep(1);
 
-        $xml_object = simplexml_load_file('/usr/lib/zabbix/externalscripts/nokia_equipment_status.xml');
+        $xml_object = simplexml_load_file($relativePath . $xmlFile);
 
         $json_string = json_encode($xml_object);
 

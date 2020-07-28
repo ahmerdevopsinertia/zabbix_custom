@@ -18,7 +18,16 @@ if (isset($argv[2])) {
     return;
 }
 
-$fh = fopen('/usr/lib/zabbix/externalscripts/nokia_interface_details.xml', 'r+');
+if (isset($argv[3])) {
+    $host = $argv[3];
+} else {
+    $host = '172.17.66.13';
+}
+
+$relativePath = '/usr/lib/zabbix/externalscripts/';
+$xmlFile = $host . '_interface_stats.xml';
+
+$fh = fopen($relativePath . $xmlFile, 'r+');
 
 while ($line = fgets($fh)) {
     if (preg_match('/^port : ont:/', $line)) {

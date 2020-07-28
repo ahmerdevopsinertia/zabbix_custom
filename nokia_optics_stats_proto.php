@@ -6,17 +6,28 @@ if (isset($argv[1])) {
     $port = $argv[1];
 } else {
     $output = floatVal($output);
-    echo $output;return;
+    echo $output;
+    return;
 }
 
 if (isset($argv[2])) {
     $type = strtoupper($argv[2]);
 } else {
-   $output = floatVal($output);
-   echo $output;return;
+    $output = floatVal($output);
+    echo $output;
+    return;
 }
 
-$xmlObject = simplexml_load_file('/usr/lib/zabbix/externalscripts/nokia_optics_stats.xml');
+if (isset($argv[3])) {
+    $host = $argv[3];
+} else {
+    $host = '172.17.66.13';
+}
+
+$relativePath = '/usr/lib/zabbix/externalscripts/';
+$xmlFile = $host . '_optics_stats.xml';
+
+$xmlObject = simplexml_load_file($relativePath . $xmlFile);
 
 $jsonString = json_encode($xmlObject);
 

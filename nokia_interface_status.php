@@ -31,13 +31,15 @@ if (isset($argv[4])) {
 // call connection function
 $connection_class = new NokiaOltConnection($host, $port, $user, $password);
 $connection = $connection_class->get_connection();
+$relativePath = '/usr/lib/zabbix/externalscripts/';
+$xmlFile = $host . '_interface_stats.xml';
 
 if ($connection != NULL) {
     $shell  = $connection_class->get_shell($connection, 'xterm');
     if ($shell != NULL) {
         $command = 'show interface port detail' . PHP_EOL;
         fwrite($shell, $command);
-        $fh = fopen('/usr/lib/zabbix/externalscripts/nokia_interface_details_temp.xml', 'wa+');
+        $fh = fopen($relativePath . $xmlFile, 'wa+');
         $count = 0;
         while ($count < 3) {
             sleep(1);
@@ -67,7 +69,7 @@ if ($connection != NULL) {
         fclose($fh);
         fclose($shell);
 
-        chmod('/usr/lib/zabbix/externalscripts/nokia_interface_details_temp.xml', 0777);
+        chmod($relativePath . $xmlFile, 0777);
         if (count($json['data']) == 0) {
             array_push($json['data'], array('ont' => '0'));
         }

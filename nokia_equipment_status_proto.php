@@ -9,7 +9,16 @@ if (isset($argv[1]) && $argv[1] != 0) {
     return;
 }
 
-$xmlObject = simplexml_load_file('/usr/lib/zabbix/externalscripts/nokia_equipment_status.xml');
+if (isset($argv[2])) {
+    $host = $argv[2];
+} else {
+    $host = '172.17.66.13';
+}
+
+$relativePath = '/usr/lib/zabbix/externalscripts/';
+$xmlFile = $host . '_equipment_stats.xml';
+
+$xmlObject = simplexml_load_file($relativePath . $xmlFile);
 
 $jsonString = json_encode($xmlObject);
 
