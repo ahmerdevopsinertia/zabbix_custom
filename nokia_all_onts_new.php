@@ -148,7 +148,7 @@ try {
                array_push($ont_json_array['data'], array(
                   'ont' => trim($value['eh']['name']['ehNm']),
                   'hostName' => trim($value['eh']['name']['mdNm']),
-                  'ip' => trim($value['eh']['name']['meNm'])
+                  'host' => trim($value['eh']['name']['meNm'])
                ));
             }
          }
