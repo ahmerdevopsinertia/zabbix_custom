@@ -1,69 +1,43 @@
 #!/usr/bin/php
 <?php
 
+require_once('nokia_ams_plugin_configuration.php');
+require_once('nokia_validate_xml.php');
+
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
-
-require_once('nokia_validate_xml.php');
 $ont_json_array = array('data' => array());
 
-// idm server host
-if (!isset($argv[1])) {
-   $param_one = '172.16.66.20:8443';
-} else {
-   $param_one = $argv[1];
-}
+// fetching Nokia AMS plugin idm service urls & credentials
+$ams_configuration_instance = new NokiaAMSPluginConfiguration();
+$ams_configuration = $ams_configuration_instance->get();
 
-// idm service url
-if (!isset($argv[2])) {
-   $param_two = 'idm/services/InventoryRetrievalMgrExtns';
-} else {
-   $param_two = $argv[2];
-}
+$idm_server_host = $ams_configuration['idm_server_host'];
+$idm_service_url = $ams_configuration['idm_service_url'];
+$idm_service_name = $ams_configuration['idm_service_name'];
+$idm_server_user = $ams_configuration['idm_server_user'];
+$idm_server_password = $ams_configuration['idm_server_password'];
 
-// idm server user_name   
-if (!isset($argv[3])) {
-   $param_three = 'techno';
-} else {
-   $param_three = $argv[3];
-}
-
-// idm server password
-if (!isset($argv[4])) {
-   $param_four = '4EPf3nme';
-} else {
-   $param_four = $argv[4];
-}
+$param_value = 0;
 
 // olt name
-if (!isset($argv[5])) {
-   $param_five = 'AMS';
+if (!isset($argv[1])) {
+   $olt_name = 'AMS';
 } else {
-   $param_five = $argv[5];
+   $olt_name = $argv[1];
 }
 
 // olt ip address or host
-if (!isset($argv[6])) {
-   $param_six = 'olt0.test02';
+if (!isset($argv[2])) {
+   $olt_host = 'olt0.test02';
 } else {
-   $param_six = $argv[6];
+   $olt_host = $argv[2];
 }
 
-// idm service name
-if (!isset($argv[7])) {
-   $param_seven = 'idm/services';
-} else {
-   $param_seven = $argv[7];
-}
-
-$host = $param_one;
-$service_url = 'https://' . $host . '/' . $param_two;
-$service_name = 'https://' . $host . '/' . $param_seven;
-$user_name = $param_three;
-$password = $param_four;
-
-$credentials = $user_name . ':' . $password;
+$service_url = 'https://' . $idm_server_host . '/' . $idm_service_url;
+$service_name = 'https://' . $idm_server_host . '/' . $idm_service_name;
+$credentials = $idm_server_user . ':' . $idm_server_password;
 
 $request_payload = '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns="alu.v1" xmlns:alu="alu.v1" xmlns:tmf854="tmf854.v1" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
    <soapenv:Header>
@@ -86,8 +60,8 @@ $request_payload = '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/
             <scopeList>
                <scope>
                   <baseObject>
-                     <tmf854:mdNm>' . $param_five . '</tmf854:mdNm>
-                     <tmf854:meNm>' . $param_six . '</tmf854:meNm>
+                     <tmf854:mdNm>' . $olt_name . '</tmf854:mdNm>
+                     <tmf854:meNm>' . $olt_host . '</tmf854:meNm>
                   </baseObject>
                   <level>WHOLE_SUBTREE</level>
                </scope>
@@ -117,26 +91,31 @@ try {
    curl_setopt($ch, CURLOPT_TIMEOUT, 1000);
 
    $response = curl_exec($ch);
+   $responseCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
-   if ($response === FALSE) {
-      $response = curl_error($ch);
+   if ($responseCode != 200) {
+      curl_close($ch);
+      array_push($ont_json_array['data'], array('ont' => 0, 'ontNumber' => '0', 'oltName' => '0', 'oltHost' => '0'));
+      print_r(json_encode($ont_json_array));
+      return;
    }
    curl_close($ch);
 
-   // preparing json
+   // preparing final result
 
    $validateXML = new NokiaValidateXml(NULL, NULL);
-   $cleaned_xml_string = $validateXML->cleanXMLStringCustom($response, ['soapenv:', 'tmf854:', 'sdc:'], NULL);
 
-   // Array ( [Fault] => Array ( [faultcode] => VersionMismatch [faultstring] => Only SOAP 1.1 or SOAP 1.2 messages are supported in the system [detail] => Array ( ) ) ) 1
+   // cleaning extra string from xml to validate the xml in next steps
+   $cleaned_xml_string = $validateXML->cleanXMLStringCustom($response, ['soapenv:', 'tmf854:', 'sdc:'], NULL);
 
    if ($cleaned_xml_string != 'exception') {
       $xml_object = simplexml_load_string($cleaned_xml_string, 'SimpleXMLElement', LIBXML_NOWARNING);
-
       $json = json_encode($xml_object);
       $json_array = json_decode($json, true);
-      if (!isset($json_array['Body'])) {
-         print_r(json_encode($json_array));
+
+      if (!isset($json_array['Body']) || (isset($json_array['Body']['Fault']))) {
+         array_push($ont_json_array['data'], array('ont' => 0, 'ontNumber' => '0', 'oltName' => '0', 'oltHost' => '0'));
+         print_r(json_encode($ont_json_array));
          return;
       }
       $inventory_object_array = $json_array['Body']['getInventoryResponse']['inventoryObjectData']['inventoryObject'];
@@ -145,10 +124,14 @@ try {
       foreach ($inventory_object_array as $value) {
          if (isset($value['eh']['name']['ehNm'])) {
             if (preg_match($ont_find_pattern, trim($value['eh']['name']['ehNm']))) {
+               $ont_split = explode('/', trim($value['eh']['name']['ehNm']));
+               $ont_split = explode('=', $ont_split[5]);
+               $ont_split = $ont_split[1];
                array_push($ont_json_array['data'], array(
+                  'ontNumber' => (int)$ont_split,
                   'ont' => trim($value['eh']['name']['ehNm']),
-                  'hostName' => trim($value['eh']['name']['mdNm']),
-                  'host' => trim($value['eh']['name']['meNm'])
+                  'oltName' => trim($value['eh']['name']['mdNm']),
+                  'oltHost' => trim($value['eh']['name']['meNm'])
                ));
             }
          }
@@ -156,12 +139,13 @@ try {
       print_r(json_encode($ont_json_array));
       return;
    } else {
-      array_push($json['data'], array('ont' => '0'));
-      print_r(json_encode($json_array));
+      array_push($ont_json_array['data'], array('ont' => 0, 'ontNumber' => '0', 'oltName' => '0', 'oltHost' => '0'));
+      print_r(json_encode($ont_json_array));
       return;
    }
 } catch (Exception $e) {
-   print_r(json_encode($json_array));
+   array_push($ont_json_array['data'], array('ont' => 0, 'ontNumber' => '0', 'oltName' => '0', 'oltHost' => '0'));
+   print_r(json_encode($ont_json_array));
    return;
 }
 ?>

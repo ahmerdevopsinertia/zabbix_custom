@@ -1,49 +1,27 @@
 #!/usr/bin/php
 <?php
 
+require_once('nokia_ams_plugin_configuration.php');
+require_once('nokia_validate_xml.php');
+
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
+// fetching Nokia AMS plugin sdc service urls & credentials
+$ams_configuration_instance = new NokiaAMSPluginConfiguration();
+$ams_configuration = $ams_configuration_instance->get();
+
+$sdc_server_host = $ams_configuration['sdc_server_host'];
+$sdc_service_url = $ams_configuration['sdc_service_url'];
+$sdc_service_name = $ams_configuration['sdc_service_name'];
+$sdc_server_user = $ams_configuration['sdc_server_user'];
+$sdc_server_password = $ams_configuration['sdc_server_password'];
+
 $param_value = 0;
 
-// idm server host
-if (!isset($argv[1])) {
-    $idm_server_host = '172.16.66.20:8443';
-} else {
-    $idm_server_host = $argv[1];
-}
-
-// idm service url
-if (!isset($argv[2])) {
-    $idm_service_url = 'sdc/services/PerformanceManagementRetrievalExtns';
-} else {
-    $idm_service_url = $argv[2];
-}
-
-// idm service name
-if (!isset($argv[3])) {
-    $idm_service_name = 'idm/services';
-} else {
-    $idm_service_name = $argv[3];
-}
-
-// idm server user
-if (!isset($argv[4])) {
-    $idm_server_user = 'techno';
-} else {
-    $idm_server_user = $argv[4];
-}
-
-// idm server password
-if (!isset($argv[5])) {
-    $idm_server_password = '4EPf3nme';
-} else {
-    $idm_server_password = $argv[5];
-}
-
 // olt name, olt ip address or host, ont and stats param
-if ((!isset($argv[6])) || (!isset($argv[7])) || (!isset($argv[8])) || (!isset($argv[9])) || (!isset($argv[10]))) {
+if ((!isset($argv[1])) || (!isset($argv[2])) || (!isset($argv[3])) || (!isset($argv[4])) || (!isset($argv[5]))) {
     $olt_name = 'AMS';
     $olt_host = 'olt0.test02';
     $ont = '/rack=1/shelf=1/slot=LT3/port=16/remote_unit=1';
@@ -51,24 +29,25 @@ if ((!isset($argv[6])) || (!isset($argv[7])) || (!isset($argv[8])) || (!isset($a
     $stats_param = 'gponOntAniOpInfoTxOpticalSignalLevel';
 
     // extract ont name
-    $ont = extract_ont_generic($ont, $stats_type);
+    $ont = extract_ont($ont, $stats_type);
 
-    // return 0;
+    // echo $param_value;
+    // return;
 } else {
-    $olt_name = $argv[6];
-    $olt_host = $argv[7];
-    $ont = $argv[8];
-    $stats_type = $argv[9];
-    $stats_param = $argv[10];
+    $olt_name = $argv[1];
+    $olt_host = $argv[2];
+    $ont = $argv[3];
+    $stats_type = $argv[4];
+    $stats_param = $argv[5];
 
     // extract ont name
-    $ont = extract_ont_generic($ont, $stats_type);
+    $ont = extract_ont($ont, $stats_type);
 }
 
-$host = $idm_server_host;
-$idm_service_url  = 'https://' . $host . '/' . $idm_service_url;
-$idm_service_name = 'https://' . $host . '/' . $idm_service_name;
-$credentials = $idm_server_user . ':' . $idm_server_password;
+$host = $sdc_server_host;
+$sdc_service_url  = 'https://' . $host . '/' . $sdc_service_url;
+$sdc_service_name = 'https://' . $host . '/' . $sdc_service_name;
+$credentials = $sdc_server_user . ':' . $sdc_server_password;
 
 $request_payload = '<soapenv:Envelope xmlns:sdc="sdcNbi" xmlns:tmf="tmf854.v1" xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
 <soapenv:Header>
@@ -99,48 +78,51 @@ $request_payload = '<soapenv:Envelope xmlns:sdc="sdcNbi" xmlns:tmf="tmf854.v1" x
 
 try {
     //setting the curl parameters
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $idm_service_url);
+    $ch = curl_init($sdc_service_url);
+    curl_setopt($ch, CURLOPT_URL, $sdc_service_url);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $request_payload);
     curl_setopt($ch, CURLOPT_USERPWD, $credentials);
     curl_setopt($ch, CURLOPT_HTTPHEADER, array(
         'Accept-Encoding: gzip,deflate',
         'Content-Type: text/xml;charset=UTF-8',
     ));
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 1000);
     curl_setopt($ch, CURLOPT_TIMEOUT, 1000);
-
     $response = curl_exec($ch);
+    $responseCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
-    if ($response === FALSE) {
-        $response = curl_error($ch);
+    if ($responseCode != 200) {
+        curl_close($ch);
+        echo $param_value;
+        return;
     }
     curl_close($ch);
 
-    // preparing json
-    require_once('nokia_validate_xml.php');
+    // preparing result
     $validateXML = new NokiaValidateXml(NULL, NULL);
+    // cleaning extra string from xml to validate the xml in next steps
     $cleaned_xml_string = $validateXML->cleanXMLStringCustom($response, ['soapenv:', 'tmf854:', 'sdc:'], NULL);
-
-    // die(print_r(htmlspecialchars($cleaned_xml_string)));
-
-    // Array ( [Fault] => Array ( [faultcode] => VersionMismatch [faultstring] => Only SOAP 1.1 or SOAP 1.2 messages are supported in the system [detail] => Array ( ) ) ) 1
 
     if ($cleaned_xml_string != 'exception') {
         $xml_object = simplexml_load_string($cleaned_xml_string, 'SimpleXMLElement', LIBXML_NOWARNING);
         $json = json_encode($xml_object);
         $json_array = json_decode($json, true);
 
-        if (!isset($json_array['Body'])) {
+        if (!isset($json_array['Body']) || (isset($json_array['Body']['Fault']))) {
             echo $param_value;
             return;
         }
         $param_status = $json_array['Body']['GetPerformanceMonitoringDataForObjectsResponse']['pmDataListForObject']['pmDataList']['pmData']['pmParameterStatus'];
         if ($param_status == 'PMIS_Valid') {
             $param_value = $json_array['Body']['GetPerformanceMonitoringDataForObjectsResponse']['pmDataListForObject']['pmDataList']['pmData']['pmParameterValue'];
+            if ($stats_type == '/type=UNI') {
+                if ($param_value == 'Instance Unavailable') {
+                    $param_value = 0;
+                }
+            }
         }
     }
     echo trim($param_value);
@@ -149,8 +131,7 @@ try {
     return;
 }
 
-// extract ont for bandwidth (up and down) stats
-function extract_ont_generic($ont, $stats_type)
+function extract_ont($ont, $stats_type)
 {
     // /rack=1/shelf=1/slot=LT3/port=16/remote_unit=1
     // R1.S1.LT3.PON16.ONT2.C14.P1
