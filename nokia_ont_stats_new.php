@@ -4,10 +4,6 @@
 require_once('nokia_ams_plugin_configuration.php');
 require_once('nokia_validate_xml.php');
 
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-
 // fetching Nokia AMS plugin sdc service urls & credentials
 $ams_configuration_instance = new NokiaAMSPluginConfiguration();
 $ams_configuration = $ams_configuration_instance->get();
@@ -22,17 +18,9 @@ $param_value = 0;
 
 // olt name, olt ip address or host, ont and stats param
 if ((!isset($argv[1])) || (!isset($argv[2])) || (!isset($argv[3])) || (!isset($argv[4])) || (!isset($argv[5]))) {
-    $olt_name = 'AMS';
-    $olt_host = 'olt0.test02';
-    $ont = '/rack=1/shelf=1/slot=LT3/port=16/remote_unit=1';
-    $stats_type = '/type=Optical Measurements';
-    $stats_param = 'gponOntAniOpInfoTxOpticalSignalLevel';
-
-    // extract ont name
-    $ont = extract_ont($ont, $stats_type);
-
-    // echo $param_value;
-    // return;
+    // stopping execution immediaetly 
+    echo $param_value;
+    return;
 } else {
     $olt_name = $argv[1];
     $olt_host = $argv[2];
@@ -40,8 +28,10 @@ if ((!isset($argv[1])) || (!isset($argv[2])) || (!isset($argv[3])) || (!isset($a
     $stats_type = $argv[4];
     $stats_param = $argv[5];
 
-    // extract ont name
-    $ont = extract_ont($ont, $stats_type);
+    // prepare ONT
+    if ($stats_type == '/type=UNI') {
+        $ont = prepare_ont($ont);
+    }
 }
 
 $host = $sdc_server_host;
@@ -49,6 +39,7 @@ $sdc_service_url  = 'https://' . $host . '/' . $sdc_service_url;
 $sdc_service_name = 'https://' . $host . '/' . $sdc_service_name;
 $credentials = $sdc_server_user . ':' . $sdc_server_password;
 
+// request payload (SOAP format)
 $request_payload = '<soapenv:Envelope xmlns:sdc="sdcNbi" xmlns:tmf="tmf854.v1" xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
 <soapenv:Header>
    <tmf:header tmf854Version="?" extAuthor="?" extVersion="?">
@@ -64,7 +55,7 @@ $request_payload = '<soapenv:Envelope xmlns:sdc="sdcNbi" xmlns:tmf="tmf854.v1" x
             <sdc:pmObjectSelect>
                <tmf:mdNm>' . $olt_name . '</tmf:mdNm>
                <tmf:meNm>' . $olt_host . '</tmf:meNm>
-               <tmf:propNm>' . $stats_type . $ont . '</tmf:propNm>
+               <tmf:propNm>' . $stats_type . '/' . $ont . '</tmf:propNm>
             </sdc:pmObjectSelect>
             <sdc:pmParameterList>
 							<sdc:pmParameter>
@@ -131,63 +122,11 @@ try {
     return;
 }
 
-function extract_ont($ont, $stats_type)
+// prepare ONT for bandwidht stats
+function prepare_ont($ont)
 {
-    // /rack=1/shelf=1/slot=LT3/port=16/remote_unit=1
-    // R1.S1.LT3.PON16.ONT2.C14.P1
-    // R1.S1.LT3.PON16.ONT1
-
-    $new_ont = NULL;
-
-    $pattern_rack = '/^rack=([0-9]+)$/';
-    $pattern_shelf = '/^shelf=([0-9]+)$/';
-    $pattern_slot = '/^slot=LT([0-9]+)$/';
-    $pattern_port = '/^port=([0-9]+)$/';
-    $pattern_remote_unit = '/^remote_unit=([0-9]+)$/';
-
-    $ont_split = explode('/', $ont);
-
-    foreach ($ont_split as $item) {
-        // Rack
-        if (preg_match($pattern_rack, $item)) {
-            $rack_split = explode('=', $item);
-            $rack_number = $rack_split[1];
-            $new_ont = '/R' . $rack_number . '.';
-        }
-
-        // Shelf
-        if (preg_match($pattern_shelf, $item)) {
-            $shelf_split = explode('=', $item);
-            $shelf_number = $shelf_split[1];
-            $new_ont .= 'S' . $shelf_number . '.';
-        }
-
-        // Slot
-        if (preg_match($pattern_slot, $item)) {
-            $slot_split = explode('=', $item);
-            $slot_number = $slot_split[1];
-            $new_ont .= $slot_number . '.';
-        }
-
-        // Port
-        if (preg_match($pattern_port, $item)) {
-            $port_split = explode('=', $item);
-            $port_number = $port_split[1];
-            $new_ont .= 'PON' . $port_number . '.';
-        }
-
-        // Remote Unit
-        if (preg_match($pattern_remote_unit, $item)) {
-            $remote_unit_split = explode('=', $item);
-            $ont_number = $remote_unit_split[1];
-            $new_ont .= 'ONT' . $ont_number;
-        }
-    }
-
-    if ($stats_type == '/type=UNI') {
-        // for bandwidth stats
-        $new_ont .= '.C14.P1';
-    }
+    // for bandwidth stats
+    $new_ont = $ont . '.C14.P1';
     return $new_ont;
 }
 ?>
