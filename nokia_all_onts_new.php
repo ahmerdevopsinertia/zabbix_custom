@@ -126,7 +126,7 @@ try {
       }
       $inventory_object_array = $json_array['Body']['queryResponse']['queryObjectData']['queryObject'];
 
-      $ont_find_pattern = "/^\/type=ONT\/R([0-9]+).S([0-9]+).LT([0-9]+).PON([0-9]+).ONT([0-9]+)$/";
+      $ont_find_pattern = "/^\/type=ONT\/R([0-9]+).S([0-9]+).LT3.PON16.ONT([0-9]+)$/";
       foreach ($inventory_object_array as $value) {
          if ((isset($value['name']['mdNm']) && isset($value['name']['meNm']) && isset($value['name']['ptpNm']))) {
             $trimmed_value = $value['name']['ptpNm'];
