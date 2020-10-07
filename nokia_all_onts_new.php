@@ -1,4 +1,5 @@
 #!/usr/bin/php
+
 <?php
 
 require_once('nokia_ams_plugin_configuration.php');
@@ -21,7 +22,7 @@ $param_value = 0;
 // olt name
 if (!isset($argv[1])) {
    // stopping execution immediaetly 
-   array_push($ont_json_array['data'], array('ont' => 0, 'ontNumber' => '0', 'oltName' => '0', 'oltHost' => '0'));
+   array_push($ont_json_array['data'], array('ont' => NULL, 'ontNumber' => '0', 'oltName' => '0', 'oltHost' => '0'));
    print_r(json_encode($ont_json_array));
    return;
 } else {
@@ -30,7 +31,7 @@ if (!isset($argv[1])) {
 
 // olt ip address or host
 if (!isset($argv[2])) {
-   array_push($ont_json_array['data'], array('ont' => 0, 'ontNumber' => '0', 'oltName' => '0', 'oltHost' => '0'));
+   array_push($ont_json_array['data'], array('ont' => NULL, 'ontNumber' => '0', 'oltName' => '0', 'oltHost' => '0'));
    print_r(json_encode($ont_json_array));
    return;
 } else {
@@ -101,7 +102,7 @@ try {
 
    if ($responseCode != 200) {
       curl_close($ch);
-      array_push($ont_json_array['data'], array('ont' => 0, 'ontNumber' => '0', 'oltName' => '0', 'oltHost' => '0'));
+      array_push($ont_json_array['data'], array('ont' => NULL, 'ontNumber' => '0', 'oltName' => '0', 'oltHost' => '0'));
       print_r(json_encode($ont_json_array));
       return;
    }
@@ -120,21 +121,24 @@ try {
       $json_array = json_decode($json, true);
 
       if (!isset($json_array['Body']) || (isset($json_array['Body']['Fault']))) {
-         array_push($ont_json_array['data'], array('ont' => 0, 'ontNumber' => '0', 'oltName' => '0', 'oltHost' => '0'));
+         array_push($ont_json_array['data'], array('ont' => NULL, 'ontNumber' => '0', 'oltName' => '0', 'oltHost' => '0'));
          print_r(json_encode($ont_json_array));
          return;
       }
       $inventory_object_array = $json_array['Body']['queryResponse']['queryObjectData']['queryObject'];
+      $ont_find_pattern = "/^\/type=ONT\/R([0-9]+).S([0-9]+).LT([0-9]+).PON([0-9]+).ONT([0-9]+)$/";
+      $trimmed_value_ptpNm = $trimmed_value_mdNm = $trimmed_value_meNm = "";
 
-      $ont_find_pattern = "/^\/type=ONT\/R([0-9]+).S([0-9]+).LT3.PON16.ONT([0-9]+)$/";
-      foreach ($inventory_object_array as $value) {
-         if ((isset($value['name']['mdNm']) && isset($value['name']['meNm']) && isset($value['name']['ptpNm']))) {
-            $trimmed_value = $value['name']['ptpNm'];
-            // echo $trimmed_value;
-            if (preg_match($ont_find_pattern, $trimmed_value)) {
-               // echo '<br>' . 'MATCHED' . PHP_EOL;
+      if (isset($inventory_object_array) && isset($inventory_object_array[0])) {
+         // this block of code will be executed 
+         // if retrieved OLT have multiple ONTs
+         foreach ($inventory_object_array as $value) {
+            $trimmed_value_ptpNm = trim($value['name']['ptpNm']);
+            $trimmed_value_mdNm = trim($value['name']['mdNm']);
+            $trimmed_value_meNm = trim($value['name']['meNm']);
+            if (preg_match($ont_find_pattern, $trimmed_value_ptpNm)) {
                // extracting ONT detail 
-               $ont_detail = extract_ont_detail($trimmed_value);
+               $ont_detail = extract_ont_detail($trimmed_value_ptpNm);
                if ($ont_detail == 'exception') {
                   $ont_detail = 0;
                } else {
@@ -146,25 +150,55 @@ try {
                      $ont_number = (int) $ont_number;
                   }
                }
-
+   
                array_push($ont_json_array['data'], array(
                   'ontNumber' => $ont_number,
                   'ont' => $ont_detail,
-                  'oltName' => trim($value['name']['mdNm']),
-                  'oltHost' => trim($value['name']['meNm'])
+                  'oltName' => $trimmed_value_mdNm,
+                  'oltHost' => $trimmed_value_meNm
                ));
             }
          }
+         print_r(json_encode($ont_json_array));
+         return;
+      } else {
+         // this block of code will be executed 
+         // if retrieved OLT have just 1 ONT 
+         $trimmed_value_ptpNm = trim($inventory_object_array['name']['ptpNm']);
+         $trimmed_value_mdNm = trim($inventory_object_array['name']['mdNm']);
+         $trimmed_value_meNm = trim($inventory_object_array['name']['meNm']);
+         if (preg_match($ont_find_pattern, $trimmed_value_ptpNm)) {
+            // extracting ONT detail 
+            $ont_detail = extract_ont_detail($trimmed_value_ptpNm);
+            if ($ont_detail == 'exception') {
+               $ont_detail = 0;
+            } else {
+               // extracting ONT number
+               $ont_number = extract_ont_number($ont_detail);
+               if ($ont_number == 'exception') {
+                  $ont_number = 0;
+               } else {
+                  $ont_number = (int) $ont_number;
+               }
+            }
+
+            array_push($ont_json_array['data'], array(
+               'ontNumber' => $ont_number,
+               'ont' => $ont_detail,
+               'oltName' => $trimmed_value_mdNm,
+               'oltHost' => $trimmed_value_meNm
+            ));
+         }
+         print_r(json_encode($ont_json_array));
+         return;
       }
-      print_r(json_encode($ont_json_array));
-      return;
    } else {
-      array_push($ont_json_array['data'], array('ont' => 0, 'ontNumber' => '0', 'oltName' => '0', 'oltHost' => '0'));
+      array_push($ont_json_array['data'], array('ont' => NULL, 'ontNumber' => '0', 'oltName' => '0', 'oltHost' => '0'));
       print_r(json_encode($ont_json_array));
       return;
    }
 } catch (Exception $e) {
-   array_push($ont_json_array['data'], array('ont' => 0, 'ontNumber' => '0', 'oltName' => '0', 'oltHost' => '0'));
+   array_push($ont_json_array['data'], array('ont' => NULL, 'ontNumber' => '0', 'oltName' => '0', 'oltHost' => '0'));
    print_r(json_encode($ont_json_array));
    return;
 }
